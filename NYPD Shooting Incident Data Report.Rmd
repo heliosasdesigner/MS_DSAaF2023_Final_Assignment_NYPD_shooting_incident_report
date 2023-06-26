@@ -1,0 +1,340 @@
+---
+title: "NYPD Shooting Incident Data Report"
+author: "H. SL. So"
+date: "2023-06-07"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+Import, tidy and analyze the NYPD Shooting Incident dataset obtained. Be sure the project is reproducible and contains some visualization and analysis. And the report should include at least two visualizations and one model. Be sure to identify any bias possible in the data and in this analysis.
+
+### Information of Data
+
+List of every shooting incident that occurred in NYC going back to 2006 through the end of the previous calendar year.
+
+This is a breakdown of every shooting incident that occurred in NYC going back to 2006 through the end of the previous calendar year. This data is manually extracted every quarter and reviewed by the Office of Management Analysis and Planning before being posted on the NYPD website. Each record represents a shooting incident in NYC and includes information about the event, the location and time of occurrence. In addition, information related to suspect and victim demographics is also included. This data can be used by the public to explore the nature of shooting/criminal activity. Please refer to the attached data footnotes for additional information about this dataset.
+
+**Columns in this Dataset:**
+
+https://data.cityofnewyork.us/Public-Safety/NYPD-Shooting-Incident-Data-Historic-/833y-fsy8
+
+INCIDENT_KEY	: Randomly generated persistent ID for each arrest (Plain Text)
+
+OCCUR_DATE	: Exact date of the shooting incident (Date & Time)
+
+OCCUR_TIME : Exact time of the shooting incident (Plain Text)
+
+BORO	: Borough where the shooting incident occurred (Plain Text)
+
+LOC_OF_OCCUR_DESC	 : N/A (Plain Text)
+
+PRECINCT	: Precinct where the shooting incident occurred (Number)
+
+JURISDICTION_CODE	 : Jurisdiction where the shooting incident occurred. Jurisdiction codes 0(Patrol), 1(Transit) and 2(Housing) represent NYPD whilst codes 3 and more represent non NYPD jurisdictions (Number)
+
+LOC_CLASSFCTN_DESC	 : N/A (Plain Text)
+
+LOCATION_DESC	 : Location of the shooting incident (Plain Text)
+
+STATISTICAL_MURDER_FLAG	 : Shooting resulted in the victim’s death which would be counted as a murder (Checkbox)
+
+PERP_AGE_GROUP	: Perpetrator’s age within a category (Plain Text)
+
+PERP_SEX	: Perpetrator’s sex description (Plain Text)
+
+PERP_RACE	: Perpetrator’s race description (Plain Text)
+
+VIC_AGE_GROUP	 : Victim’s age within a category (Plain Text)
+
+VIC_SEX	: Victim’s sex description (Plain Text)
+
+VIC_RACE : Victim’s race description (Plain Text)
+
+X_COORD_CD	: Midblock X-coordinate for New York State Plane Coordinate System, Long Island Zone, NAD 83, units feet (FIPS 3104) (Plain Text)
+
+Y_COORD_CD	: Midblock Y-coordinate for New York State Plane Coordinate System, Long Island Zone, NAD 83, units feet (FIPS 3104) (Plain Text)
+
+Latitude	: Latitude coordinate for Global Coordinate System, WGS 1984, decimal degrees (EPSG 4326) (Number)
+
+Longitude	: Longitude coordinate for Global Coordinate System, WGS 1984, decimal degrees (EPSG 4326) (Number)
+
+Lon_Lat	: Longitude and Latitude Coordinates for mapping (Point)
+
+Borough Boundaries	: N/A (Number)
+
+City Council Districts		: N/A (Number)
+
+Police Precincts		: N/A (Number)
+
+Zip Codes		: N/A (Number)
+
+Community Districts		: N/A (Number)
+
+
+
+### 1. Read the CSV
+1.1. Import library
+
+```{r read_data, echo=TRUE}
+library(tidyverse)
+library(tidyr)
+```
+1.2. Assign URL as variable and download data from URL
+
+```{r down_data, echo=TRUE}
+url_data <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv"
+raw_df <- read_csv(url_data)
+
+```
+
+1.3. Check out the Raw date by `Summary()`
+```{r raw_df}
+summary(raw_df)
+```
+
+### 2. Tidy the Data
+
+2.1 The data formet
+
+
+```{r Tidy_data}
+# Import Library
+library(dplyr)
+
+# Change the date format
+raw_df$OCCUR_DATE <- as.Date(raw_df$OCCUR_DATE, format = "%m/%d/%Y")
+
+# Prepare the date which can group by year, Month
+raw_df$Year <- format(raw_df$OCCUR_DATE, "%Y")
+raw_df$Month <- format(raw_df$OCCUR_DATE, "%m")
+raw_df$Year <- as.numeric(raw_df$Year)
+raw_df$Month <- as.numeric(raw_df$Month)
+
+# create a col : Year - Month
+raw_df <- raw_df %>%
+unite("Year_Mth",c(Year, Month),
+        sep="-",
+        na.rm = TRUE,
+        remove = FALSE)
+
+# Create new Dataframe
+boro_counts <- raw_df %>%
+  group_by(BORO, Year_Mth) %>%
+  summarise(cases = n())
+
+```
+
+```{r Sub-Dataframes from boro_counts}
+# Group by Victim's Sex and Year
+boro_counts_vic_sex_year <- raw_df %>%
+  group_by(BORO, Year , VIC_SEX) %>%
+  summarise(cases = n())
+
+# Group by Victim's Sex and Month
+boro_counts_vic_sex_month <- raw_df %>%
+  group_by(BORO, Month , VIC_SEX) %>%
+  summarise(cases = n())
+
+# Group by Victim's Age and Year
+boro_counts_vic_age_year <- raw_df %>%
+  group_by(BORO, Year, VIC_AGE_GROUP) %>%
+  filter(!(VIC_AGE_GROUP %in% c('UNKNOWN', '1022'))) %>%
+  summarise(cases = n())
+
+# Group by Victim's Age and Month
+boro_counts_vic_age_mth <- raw_df %>%
+  group_by(BORO, Month, VIC_AGE_GROUP) %>%
+  filter(!(VIC_AGE_GROUP %in% c('UNKNOWN', '1022'))) %>%
+  summarise(cases = n())
+
+```
+
+
+## Including Plots
+
+```{r, Plot, echo=TRUE}
+# Import Library
+library(ggplot2)
+
+# Group by Year-Month
+boro_year_mth_plot <- ggplot(boro_counts, aes(x = BORO, y = cases, 
+                                              fill = as.factor(Year_Mth))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal() +
+  labs(x = "Borough", y = "Number of Cases", fill = "Year and Month", 
+       title = "Number of Shooting Cases by Borough and Year-Month") +
+  theme(legend.text = element_text(size = 5))+
+  theme(legend.key.width = unit(0.1,"cm")) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  coord_flip()
+```
+
+### Victim's Perspective 
+```{r, Sub-Plot, echo=TRUE}
+# https://www.r-bloggers.com/2019/04/embedding-subplots-in-ggplot2-graphics/
+# Group by Year and Victim's Sex
+boro_year_vicsex_plot <- ggplot(boro_counts_vic_sex_year, 
+                                aes(x = Year, y = cases, fill = VIC_SEX)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~BORO) +
+  theme_minimal() +
+  labs(x = "Year", y = "Number of Cases", fill = "Victim's Sex Group", 
+       title = "Number of Shooting Cases by Borough and Year: Filtered by Victim's Sex Group") +
+  theme(legend.text = element_text(size = 6)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  theme(plot.margin = margin(1, 1, 3, 1, "cm"))
+
+# Group by Month and Victim's Sex
+boro_month_vicsex_plot <- ggplot(boro_counts_vic_sex_month, 
+                                 aes(x = Month, y = cases, fill = VIC_SEX)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~BORO) +
+  theme_minimal() +
+  labs(x = "Month", y = "Number of Cases", fill = "Victim's Sex Group", 
+       title = "Number of Shooting Cases by Borough and Month: Filtered by Victim's Sex Group") +
+  theme(legend.text = element_text(size = 6)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  theme(plot.margin = margin(1, 1, 3, 1, "cm"))
+
+
+# Group by Year and Victim's Age
+boro_year_age_plot <- ggplot(boro_counts_vic_age_year, 
+                             aes(x = Year, y = cases, fill = VIC_AGE_GROUP)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~BORO) +
+  theme_minimal() +
+  labs(x = "Year", y = "Number of Cases", fill = "Victim's Age Group", 
+       title = "Number of Shooting Cases by Borough and Year: Filtered by Victim's Age Group") +
+  theme(legend.text = element_text(size = 6)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  theme(plot.margin = margin(1, 1, 3, 1, "cm"))
+
+# Group by Month and Victim's Age
+boro_month_age_plot <- ggplot(boro_counts_vic_age_mth, 
+                              aes(x = Month, y = cases, fill = VIC_AGE_GROUP)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~BORO) +
+  theme_minimal() +
+  labs(x = "Month", y = "Number of Cases", fill = "Victim's Age Group", 
+       title = "Number of Shooting Cases by Borough and Month: Filtered by Victim's Age Group") +
+  theme(legend.text = element_text(size = 6)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  theme(plot.margin = margin(1, 1, 3, 1, "cm"))
+
+```
+
+# Plot the dataframe
+```{r, fig.width=10, fig.height=6,echo=FALSE}
+plot(boro_year_mth_plot)
+
+
+plot(boro_year_vicsex_plot)
+
+plot(boro_month_vicsex_plot)
+
+plot(boro_year_age_plot)
+
+plot(boro_month_age_plot)
+
+
+```
+
+
+# Finding and analyzing (Victim's Perspective)
+
+- From the graph "Number of Shooting Cases by Borough and Year-Month", we can see that most shootings happen in Brooklyn, and then the Bronx.
+- We also see that there were fewer shootings between 2017-2020. This could possibly be because of the COVID-19 pandemic.
+- The number of cases significantly raised after COVID-19.
+- It looks like a lot of shootings happen in the middle of the year.
+- When we look at the ages of the victims, most of them are between 25 and 44 years old. The second most common age group for victims is 18 to 24 years old.
+- The date reflects a higher incidence of male victims in shooting cases compared to other sexes, suggesting that males may be particularly vulnerable to these incidents.
+
+
+# Apply Regression Models
+refer: https://www.datacamp.com/tutorial/generalized-linear-models
+https://www.geeksforgeeks.org/regression-analysis-in-r-programming/
+```{r modeling}
+boro_counts_vic_age_year$BORO <- as.factor(boro_counts_vic_age_year$BORO)
+boro_counts_vic_age_year$VIC_AGE_GROUP <- as.factor(boro_counts_vic_age_year$VIC_AGE_GROUP)
+boro_counts_vic_age_year$Year <- as.numeric(as.character(boro_counts_vic_age_year$Year))
+
+
+model <- glm(cases ~ BORO + Year + VIC_AGE_GROUP, 
+             data = boro_counts_vic_age_year, 
+             family = poisson(link = "log"))
+
+
+
+# Project the future data
+future_years <- expand.grid(
+  BORO = levels(boro_counts_vic_age_year$BORO),
+  Year = 2024:2028,
+  VIC_AGE_GROUP = levels(boro_counts_vic_age_year$VIC_AGE_GROUP)
+)
+future_years$predicted_cases <- predict(model, newdata = future_years, type = "response")
+
+```
+
+```{r ploting future data}
+# Group by Prediction Year and Victim's Age 
+boro_Futureyear_age_plot <- ggplot(future_years, 
+                             aes(x = Year, y = predicted_cases, fill = VIC_AGE_GROUP)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~BORO) +
+  theme_minimal() +
+  labs(x = "Future Year", y = "Number of Cases", fill = "Victim's Age Group", 
+       title = "Number of Shooting Cases by Borough and Future Year: 
+       Filtered by Victim's Age Group") +
+  theme(legend.text = element_text(size = 6)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  theme(plot.margin = margin(1, 1, 3, 1, "cm"))
+
+plot(boro_Futureyear_age_plot)
+
+```
+
+```{r combine the prediction and existing data}
+combined_data <- rbind(
+  mutate(boro_counts_vic_age_year, cases = as.numeric(cases)),
+  mutate(future_years, cases = predicted_cases)
+)
+
+combined_plot <- ggplot(combined_data, 
+                        aes(x = Year, y = cases, fill = VIC_AGE_GROUP)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~BORO) +
+  theme_minimal() +
+  labs(x = "Year", y = "Number of Cases", fill = "Victim's Age Group", 
+       title = "Number of Shooting Cases by Borough and Year: 
+       Filtered by Victim's Age Group") +
+  theme(legend.text = element_text(size = 6)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  theme(plot.margin = margin(1, 1, 3, 1, "cm"))
+  
+
+# Display the combined plot
+plot(combined_plot)
+
+
+
+```
+
+# Finding by the model
+
+- The predictions we got from the model aren't very close to what really happened. This might mean that a regression model might not be the best choice for this kind of data.
+- Using different type of model could get better predictions or make some adjustments to it.
+- It's also possible that the complexity of the dataset requires more advanced skills or techniques for accurate modeling and prediction. Continued learning and practice will help in applying more sophisticated models in the future.
+
+
+# Identify any bias possible in the data and in this analysis
+Refer:https://www.scribbr.com/category/research-bias/
+
+### Observer bias
+From the article: Observer bias is the tendency of research participants to see what they expect or want to see, rather than what is actually occurring....
+
+One example of this might be in our data: We noticed that there were less shootings between 2017-2020. We thought this might be because of the COVID-19 pandemic. But we don't have any proof to say this for sure. This is just our guess. This could be an example of observer bias because we are making assumptions based on what we think might be happening. Also, no pieces of information explain the number significantly raised after COVID-19
